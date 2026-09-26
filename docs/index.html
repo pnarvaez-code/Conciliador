@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e7668">
+  <title>ConciliaChain | Gestión</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="barra">
+    <div>
+      <p class="marca">ConciliaChain</p>
+      <p class="submarca">Conciliación local, simple y auditable</p>
+    </div>
+    <div class="acciones">
+      <button id="exportarMemoria" class="secundario">Exportar memoria</button>
+      <label class="boton secundario">Importar memoria<input id="importarMemoria" type="file" accept=".json" hidden></label>
+      <button id="borrarMemoria" class="peligro">Borrar memoria</button>
+    </div>
+  </header>
+
+  <main class="contenedor">
+    <section id="aviso" class="aviso" role="status"></section>
+    <section class="resumen" aria-label="Resumen">
+      <article><span>Empresa</span><strong id="totalEmpresa">0</strong><small>movimientos</small></article>
+      <article><span>Banco</span><strong id="totalBanco">0</strong><small>movimientos</small></article>
+      <article><span>Conciliados</span><strong id="totalPares">0</strong><small>cruces</small></article>
+      <article><span>Pendientes</span><strong id="totalPendientes">0</strong><small>por revisar</small></article>
+    </section>
+
+    <nav class="pestanas" aria-label="Secciones">
+      <button class="activa" data-tab="panelConciliacion">Conciliación</button>
+      <button data-tab="panelMovimientos">Movimientos</button>
+      <button data-tab="panelLotes">Lotes y memoria</button>
+    </nav>
+
+    <section id="panelConciliacion" class="panel">
+      <div class="cabecera-panel"><div><h1>Conciliación</h1><p>Compara movimientos por referencia, fecha, importe y descripción.</p></div><button id="conciliar" class="principal">Ejecutar conciliación</button></div>
+      <div id="resultado" class="tabla-vacia">Todavía no ejecutaste una conciliación.</div>
+    </section>
+
+    <section id="panelMovimientos" class="panel oculto">
+      <div class="cabecera-panel"><div><h1>Registrar movimiento</h1><p>Los datos se guardan en este navegador.</p></div></div>
+      <form id="movimientoForm" class="formulario">
+        <label>Actor<select name="actor"><option value="empresa">Empresa</option><option value="banco">Banco</option></select></label>
+        <label>Fecha<input name="fecha" type="date" required></label>
+        <label>Monto<input name="monto" type="number" min="0" step="1" required></label>
+        <label>Referencia<input name="referencia" maxlength="80"></label>
+        <label class="ancho-completo">Descripción<input name="descripcion" maxlength="160" required></label>
+        <button class="principal" type="submit">Guardar movimiento</button>
+      </form>
+      <div id="listaMovimientos"></div>
+    </section>
+
+    <section id="panelLotes" class="panel oculto">
+      <div class="cabecera-panel"><div><h1>Lotes y memoria</h1><p>Cierra un lote para generar una huella local y conserva el historial de eventos.</p></div></div>
+      <form id="loteForm" class="formulario compacto">
+        <label>Actor<select name="actor"><option value="empresa">Empresa</option><option value="banco">Banco</option></select></label>
+        <label>Nombre del lote<input name="lote" value="LOTE-001" required></label>
+        <button class="principal" type="submit">Cerrar lote</button>
+      </form>
+      <div id="listaLotes" class="lista"></div>
+      <h2>Eventos</h2><div id="listaEventos" class="lista"></div>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
