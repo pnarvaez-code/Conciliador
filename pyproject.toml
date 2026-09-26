@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conciliachain"
+version = "0.1.0"
+description = "Conciliación determinista, trazable y encadenada"
+requires-python = ">=3.10"
+
+[project.scripts]
+conciliachain = "conciliachain.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
