@@ -38,3 +38,26 @@ def generar():
 def ejemplos():
     e, b = generar_registros()
     return {"empresa": e[:8], "banco": b[:8], "csv_tocado_excel": [{"fecha": "45236", "monto": "151.000"}] + e[1:8]}
+
+def escribir_ejemplos(directorio="ejemplos"):
+    import csv, json
+    from pathlib import Path
+    destino = Path(directorio); destino.mkdir(parents=True, exist_ok=True)
+    datos = ejemplos()
+    for nombre, filas in (("empresa_8.csv", datos["empresa"]), ("banco_8.csv", datos["banco"]),
+                          ("empresa_8.xml", datos["empresa"])):
+        ruta = destino / nombre
+        if ruta.suffix == ".csv":
+            campos = sorted({clave for fila in filas for clave in fila})
+            with ruta.open("w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=campos); w.writeheader(); w.writerows(filas)
+        else:
+            from utilidades.exportar import a_xml
+            ruta.write_text(a_xml(filas), encoding="utf-8")
+    tocado = destino / "empresa_tocado_excel.csv"
+    filas = list(datos["csv_tocado_excel"])
+    with tocado.open("w", newline="", encoding="utf-8") as f:
+        campos = sorted({clave for fila in filas for clave in fila})
+        w = csv.DictWriter(f, fieldnames=campos); w.writeheader(); w.writerows(filas)
+    (destino / "datos.json").write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+    return destino
