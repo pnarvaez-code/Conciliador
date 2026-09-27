@@ -14,6 +14,7 @@
       <p class="submarca">Conciliación local, simple y auditable</p>
     </div>
     <div class="acciones">
+      <button id="cargarDemo" class="principal">Cargar demo 60/58</button>
       <button id="exportarMemoria" class="secundario">Exportar memoria</button>
       <label class="boton secundario">Importar memoria<input id="importarMemoria" type="file" accept=".json" hidden></label>
       <button id="borrarMemoria" class="peligro">Borrar memoria</button>
@@ -51,6 +52,7 @@
         <label class="ancho-completo">Descripción<input name="descripcion" maxlength="160" required></label>
         <button class="principal" type="submit">Guardar movimiento</button>
       </form>
+      <button id="exportarMovimientos" class="secundario">Descargar CSV de empresa y banco</button>
       <div id="listaMovimientos"></div>
     </section>
 

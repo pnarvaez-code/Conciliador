@@ -398,6 +398,8 @@ Actions**.
 
 La aplicación web permite:
 
+- cargar el escenario demo equivalente a la aplicación Python (60 movimientos
+  de empresa y 58 del banco) con el botón **Cargar demo 60/58**;
 - registrar movimientos de empresa y banco;
 - ejecutar la conciliación desde el navegador;
 - visualizar cruces por nivel y pendientes;
@@ -406,6 +408,12 @@ La aplicación web permite:
 - exportar toda la memoria como JSON;
 - importar una memoria previamente exportada;
 - borrar los datos locales del navegador.
+
+El botón **Descargar CSV de empresa y banco** convierte los movimientos de la
+memoria web en archivos que pueden abrirse con Excel u otro sistema contable.
+La conversión no ejecuta Python en GitHub Pages: traduce en JavaScript las
+reglas y el escenario principal del ZIP para que el flujo funcione como sitio
+estático.
 
 La memoria se guarda en IndexedDB y mantiene un respaldo en localStorage. Es
 intencionalmente local: GitHub Pages sirve archivos estáticos y no ofrece una
