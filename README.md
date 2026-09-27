@@ -94,6 +94,26 @@ git clone https://github.com/pnarvaez-code/Conciliador.git
 cd Conciliador
 ```
 
+### Inicio sencillo en Windows
+
+Si descargaste el repositorio como ZIP, no necesitas escribir comandos:
+
+1. Instala Python 3.10 o superior desde
+   [python.org](https://www.python.org/downloads/windows/). Durante la
+   instalación activa **Add Python to PATH**.
+2. Abre la carpeta del proyecto.
+3. Haz doble clic en `ejecutar_web.bat`.
+4. El navegador abrirá la aplicación web con memoria y blockchain local en
+   `http://127.0.0.1:8000`.
+
+Para arrancar también los servicios Python de empresa, banco, conciliación y
+visor, haz doble clic en `ejecutar.bat`. La ventana negra debe permanecer
+abierta mientras uses los servicios; presiona `Ctrl+C` para detenerlos.
+
+`ejecutar_web.bat` solo necesita Python para servir los archivos estáticos. Si
+Python no está instalado, abre `docs/index.html` directamente, aunque algunos
+navegadores pueden restringir el almacenamiento local al usar archivos `file://`.
+
 ### Flujo completo con cuatro aplicaciones
 
 `arranque.py` limpia y prepara los datos de prueba, genera el lote inicial,
