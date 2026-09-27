@@ -128,9 +128,63 @@ python -m conciliachain.cli serve --port 8080
 La primera orden ejecuta una conciliación determinista y devuelve JSON. La
 segunda inicia un servidor HTTP unificado compatible con el núcleo existente.
 
+### Flujo recomendado de trabajo
+
+Para una operación diaria, utiliza este orden:
+
+1. Inicia la aplicación y comprueba `GET /health` en los servicios que vayas a
+   utilizar.
+2. Registra cada movimiento con el actor correcto (`empresa` o `banco`).
+3. Cierra el lote cuando el origen haya terminado de cargar movimientos.
+4. Emite el extracto en el formato que necesite el sistema receptor.
+5. Verifica el lote antes de compartir el archivo.
+6. Ejecuta la conciliación desde `5000` o desde el modo unificado.
+7. Revisa los pendientes y conserva el resultado junto con el evento de
+   conciliación.
+
+El cierre de lote es el punto de control: después de cerrar un lote, cualquier
+modificación del archivo asociado debe provocar una verificación inválida.
+Para corregir datos, genera un nuevo lote; no edites manualmente una cadena
+existente.
+
 ## API HTTP
 
 Las aplicaciones aceptan y devuelven JSON salvo las rutas de descarga.
+
+### Formato de un movimiento
+
+El cuerpo mínimo de `POST /registrar` es:
+
+```json
+{
+  "fecha": "2026-09-01",
+  "monto": 151000,
+  "referencia": "FV-4001",
+  "descripcion": "VENTA TARJETA"
+}
+```
+
+`fecha` debe usar el formato ISO `AAAA-MM-DD`; `monto` es un entero en
+guaraníes y puede ser cero; `referencia` puede estar vacía. La descripción se
+usa en el nivel 3 de conciliación. El servicio devuelve `201` si el movimiento
+se guarda y `400` si falta `fecha` o `monto`.
+
+### Códigos HTTP y errores
+
+| Código | Significado |
+|---:|---|
+| `200` | Consulta, conciliación o verificación válida |
+| `201` | Movimiento, lote o extracto creado |
+| `400` | JSON inválido o campos obligatorios ausentes |
+| `404` | Ruta no disponible para el actor |
+| `409` | La verificación detectó una alteración o brecha |
+| `500` | Error de persistencia o de generación del archivo |
+
+Las respuestas de error tienen la forma:
+
+```json
+{"error": "descripción del problema"}
+```
 
 ### Empresa (`5001`)
 
@@ -182,6 +236,38 @@ curl.exe -X POST http://127.0.0.1:5001/verificar/LOTE-20260901
 
 El visor (`5003`) es de solo lectura. El modo unificado (`8080`) combina la
 superficie principal en un único proceso.
+
+Ejemplo de una conciliación:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:5000/conciliar
+curl.exe http://127.0.0.1:5000/resultado
+curl.exe http://127.0.0.1:5000/eventos
+```
+
+Una respuesta de conciliación tiene dos colecciones:
+
+```json
+{
+  "pares": [
+    {
+      "empresa": {"fecha": "2026-09-01", "monto": 151000},
+      "banco": {"fecha": "2026-09-01", "monto": 151000},
+      "nivel": 1
+    }
+  ],
+  "pendientes": [
+    {
+      "empresa": {"fecha": "2026-09-01", "monto": 555555},
+      "explicacion": "sin candidato"
+    }
+  ]
+}
+```
+
+El campo `nivel` permite distinguir coincidencias directas de coincidencias
+basadas en fecha o descripción. Un movimiento bancario no puede aparecer en
+dos pares de la misma ejecución.
 
 ## Modelo de datos
 
@@ -268,6 +354,87 @@ intencionalmente local: GitHub Pages sirve archivos estáticos y no ofrece una
 base de datos compartida. Para mover datos entre equipos, utiliza **Exportar
 memoria** e **Importar memoria**. Para una memoria central multiusuario se
 necesitaría añadir una API autenticada y un almacenamiento remoto.
+
+### Publicar el sitio paso a paso
+
+1. Sube los cambios a `main`; el workflow de Pages se ejecuta automáticamente.
+2. En GitHub abre **Settings > Pages**.
+3. En **Build and deployment**, selecciona **GitHub Actions**.
+4. Espera a que finalice el workflow **Publicar ConciliaChain en GitHub
+   Pages**.
+5. Abre la URL que GitHub muestre en la configuración de Pages.
+
+El workflow no instala paquetes ni construye artefactos: publica directamente
+`docs/`. Por eso la URL puede funcionar en un repositorio de usuario o en un
+repositorio de proyecto sin cambiar el código de la SPA. Si se utiliza un
+dominio propio, la configuración DNS y el archivo `CNAME` deben añadirse según
+la configuración de Pages de la organización.
+
+### Memoria, copias y privacidad
+
+La memoria web se identifica por el origen completo (dominio, protocolo y
+puerto). Una copia creada en `http://localhost` no aparece automáticamente en
+la URL de GitHub Pages. Exporta la memoria desde el origen anterior y luego
+impórtala desde el nuevo.
+
+El archivo JSON exportado incluye movimientos, lotes, resultado y eventos. Se
+trata de una copia operativa, no de un archivo cifrado: no lo envíes por correo
+ni lo subas a un repositorio público si contiene datos reales. Para borrar la
+memoria, utiliza el botón **Borrar memoria** y confirma la operación; el borrado
+no puede deshacerse salvo que exista una exportación previa.
+
+## Ejemplo programático
+
+El núcleo puede utilizarse sin iniciar servidores:
+
+```python
+from datos_prueba.generador import empresa, banco
+from nucleo.conciliar import conciliar
+
+pares, pendientes = conciliar(empresa(), banco())
+print(f"pares={len(pares)} pendientes={len(pendientes)}")
+```
+
+Para una integración propia, transforma cada registro de entrada al formato
+`fecha`, `monto`, `referencia` y `descripcion`, conserva los identificadores
+del sistema origen en `metadata` y registra los errores sin convertir una
+entrada inválida en un movimiento exitoso.
+
+## Diagnóstico rápido
+
+### El puerto ya está ocupado
+
+Detén una ejecución anterior con `Ctrl+C` o cambia el modo de ejecución. Los
+puertos forman parte del contrato, por lo que no se recomienda cambiar uno
+solo sin actualizar también los clientes que lo consumen.
+
+### La verificación devuelve `409`
+
+Comprueba que:
+
+1. el lote y el actor utilizados en la URL sean los mismos del cierre;
+2. el archivo dentro de `datos/<actor>/extractos/` no haya sido editado;
+3. exista la cadena `datos/<actor>/cadena.jsonl`;
+4. la copia no haya sido truncada o concatenada con otra cadena.
+
+No sobrescribas el archivo para ocultar el error. Conserva la copia inválida
+para investigar y genera un lote nuevo después de corregir el origen.
+
+### La web no conserva datos
+
+Verifica que el navegador permita almacenamiento para el dominio de Pages y
+que no estés usando una ventana privada con políticas restrictivas. También
+puedes comprobar la memoria exportando un JSON antes de cerrar la pestaña.
+Si el navegador bloquea IndexedDB, la aplicación intenta utilizar
+`localStorage`; si ambos están deshabilitados, usa la exportación manual como
+único mecanismo de respaldo.
+
+### No aparecen 55 cruces
+
+Confirma que empresa y banco se hayan cargado desde el mismo dataset
+determinista, que no se hayan mezclado movimientos de otra ejecución y que
+cada banco se use una sola vez. Las fechas fijas del generador son parte del
+escenario de prueba; datos reales pueden producir una cantidad diferente.
 
 ## Pruebas y validaciones
 
