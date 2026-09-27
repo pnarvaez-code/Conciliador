@@ -3,10 +3,47 @@
   "use strict";
   const DB = "conciliachain-memoria", STORE = "estado", VERSION = 1;
   const hoy = new Date().toISOString().slice(0, 10);
-  const inicial = { empresa: [], banco: [], lotes: [], eventos: [], resultado: null };
+  const inicial = { empresa: [], banco: [], lotes: [], eventos: [], resultado: null, blockchain: [] };
   let estado = null;
 
   function clonar(x) { return JSON.parse(JSON.stringify(x)); }
+  function canonico(x) { return JSON.stringify(x, Object.keys(x).sort()); }
+  async function sha256(texto) {
+    const bytes = new TextEncoder().encode(texto);
+    const buffer = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(buffer)).map(x => x.toString(16).padStart(2, "0")).join("");
+  }
+  function contenidoBloque(b) {
+    return JSON.stringify({ indice:b.indice, timestamp:b.timestamp, transacciones:b.transacciones,
+      hash_anterior:b.hash_anterior, nonce:b.nonce, dificultad:b.dificultad });
+  }
+  async function minarBloque(indice, transacciones, anterior, dificultad, timestamp) {
+    let nonce=0, hash="";
+    do { hash=await sha256(contenidoBloque({indice,timestamp,transacciones,hash_anterior:anterior,nonce,dificultad})); nonce++; }
+    while (!hash.startsWith("0".repeat(dificultad)));
+    return {indice,timestamp,transacciones,hash_anterior:anterior,nonce:nonce-1,dificultad,hash_bloque:hash};
+  }
+  async function prepararBlockchain() {
+    if (estado.blockchain && estado.blockchain.length) return;
+    const genesis={indice:0,timestamp:0,transacciones:[],hash_anterior:"0".repeat(64),nonce:0,dificultad:1};
+    genesis.hash_bloque=await sha256(contenidoBloque(genesis));
+    while(!genesis.hash_bloque.startsWith("0")) genesis.nonce++,genesis.hash_bloque=await sha256(contenidoBloque(genesis));
+    estado.blockchain=[genesis]; await guardar();
+  }
+  async function agregarBloque(transacciones) {
+    const anterior=estado.blockchain[estado.blockchain.length-1];
+    const bloque=await minarBloque(estado.blockchain.length,transacciones,anterior.hash_bloque,1,Date.now());
+    estado.blockchain.push(bloque);
+  }
+  async function validarBlockchain() {
+    if (!estado.blockchain || !estado.blockchain.length) return false;
+    for(let i=0;i<estado.blockchain.length;i++) {
+      const b=estado.blockchain[i], esperado=await sha256(contenidoBloque(b));
+      if(esperado!==b.hash_bloque || !b.hash_bloque.startsWith("0".repeat(b.dificultad))) return false;
+      if(i===0 ? b.hash_anterior!=="0".repeat(64) : b.hash_anterior!==estado.blockchain[i-1].hash_bloque) return false;
+    }
+    return true;
+  }
   function abrir() {
     return new Promise((resolve) => {
       if (!window.indexedDB) return resolve(null);
@@ -45,6 +82,15 @@
   }
   function id() { return crypto.randomUUID ? crypto.randomUUID() : Date.now()+"-"+Math.random(); }
   function monto(x) { return Number(x || 0).toLocaleString("es-PY") + " Gs."; }
+  function datosDemo() {
+    const e=[], b=[];
+    for(let k=0;k<40;k++){const monto=151000+k*71000, ref=`FV-${String(4001+k).padStart(4,"0")}`;e.push({id:id(),fecha:"2026-09-01",monto,referencia:ref,descripcion:"VENTA TARJETA"});b.push({id:id(),fecha:"2026-09-01",monto,referencia:ref,descripcion:"COBRO TARJETA"});}
+    [85000,210000,335000,460000,585000,710000,835000,960000,1085000,1210000].forEach(m=>{e.push({id:id(),fecha:"2026-09-01",monto:m,referencia:"",descripcion:"VENTA EFECTIVO"});b.push({id:id(),fecha:"2026-09-02",monto:m,referencia:"",descripcion:"DEPOSITO EFECTIVO"});});
+    [1200000,1500000,1800000,2100000,2400000].forEach(m=>{e.push({id:id(),fecha:"2026-09-01",monto:m,referencia:"",descripcion:"VENTA POR TRANSFERENCIA BANCARIA"});b.push({id:id(),fecha:"2026-09-03",monto:Math.round(m*.98),referencia:"",descripcion:"ABONO POR TRANSFERENCIA"});});
+    [555555,666666,777777,888888,999999].forEach(m=>e.push({id:id(),fecha:"2026-09-01",monto:m,referencia:"",descripcion:"VENTA LOCAL"}));
+    [123456,754321,1111111].forEach(m=>b.push({id:id(),fecha:"2026-09-02",monto:m,referencia:"",descripcion:"DEPOSITO NO IDENTIFICADO"}));
+    return {empresa:e,banco:b};
+  }
   function hash(texto) { let h=2166136261; for(let i=0;i<texto.length;i++) h=Math.imul(h^texto.charCodeAt(i),16777619); return ("00000000"+(h>>>0).toString(16)).slice(-8); }
   function renderResumen() {
     document.querySelector("#totalEmpresa").textContent=estado.empresa.length;
@@ -65,7 +111,7 @@
     });
     estado.banco.forEach((b,i)=>{if(!usados.has(i))pendientes.push({banco:b,explicacion:"Sin candidato"});});
     estado.resultado={pares,pendientes,fecha:new Date().toISOString()}; estado.eventos.push({tipo:"conciliacion_ejecutada",fecha:estado.resultado.fecha,pares:pares.length});
-    guardar().then(()=>{render();aviso(`Conciliación completada: ${pares.length} cruces y ${pendientes.length} pendientes.`);});
+    agregarBloque([{tipo:"conciliacion_ejecutada",pares:pares.length,pendientes:pendientes.length,fecha:estado.resultado.fecha}]).then(()=>guardar()).then(()=>{render();aviso(`Conciliación completada: ${pares.length} cruces y ${pendientes.length} pendientes.`);});
   }
   function renderResultado() {
     const el=document.querySelector("#resultado");
@@ -82,12 +128,23 @@
     document.querySelector("#listaLotes").innerHTML=estado.lotes.length?estado.lotes.map(x=>`<div class="fila-lista"><span><strong>${x.lote}</strong> · ${x.actor}</span><span>${x.cantidad} movimientos · huella ${x.huella}</span></div>`).join(""):"<p class='tabla-vacia'>No hay lotes cerrados.</p>";
     document.querySelector("#listaEventos").innerHTML=estado.eventos.length?estado.eventos.slice().reverse().map(x=>`<div class="fila-lista"><span>${x.tipo}</span><small>${new Date(x.fecha).toLocaleString("es-PY")}</small></div>`).join(""):"<p class='tabla-vacia'>No hay eventos.</p>";
   }
-  function render(){renderResumen();renderResultado();renderMovimientos();renderLotes();}
-  function cerrarLote(e){e.preventDefault();const f=new FormData(e.target),actor=f.get("actor"),lote=f.get("lote"),movs=estado[actor];const huella=hash(JSON.stringify(movs));estado.lotes.push({actor,lote,cantidad:movs.length,huella,fecha:new Date().toISOString()});estado.eventos.push({tipo:"lote_emitido",actor,lote,fecha:new Date().toISOString()});guardar().then(()=>{render();aviso(`Lote ${lote} cerrado y guardado en memoria.`);});}
-  function registrar(e){e.preventDefault();const f=new FormData(e.target),actor=f.get("actor");estado[actor].push({id:id(),fecha:f.get("fecha"),monto:Number(f.get("monto")),referencia:f.get("referencia"),descripcion:f.get("descripcion")});estado.eventos.push({tipo:"movimiento_registrado",actor,fecha:new Date().toISOString()});guardar().then(()=>{render();e.target.reset();e.target.fecha.value=hoy;aviso("Movimiento guardado en la memoria local.");});}
+  async function renderBlockchain() {
+    const valido=await validarBlockchain();
+    const estadoEl=document.querySelector("#estadoBlockchain"); estadoEl.textContent=valido?"Cadena válida":"Cadena alterada"; estadoEl.className="etiqueta "+(valido?"nivel-1":"pendiente");
+    document.querySelector("#resumenBlockchain").textContent=`${estado.blockchain.length} bloques · SHA-256 · prueba de trabajo dificultad 1 · ${valido?"integridad confirmada":"requiere revisión"}`;
+    document.querySelector("#listaBlockchain").innerHTML=estado.blockchain.slice().reverse().map(b=>`<article class="bloque ${b.indice===0?"genesis":""}"><strong>Bloque #${b.indice}${b.indice===0?" · GÉNESIS":""}</strong><span>${b.transacciones.length} transacciones · nonce ${b.nonce}</span><code>hash: ${b.hash_bloque}</code><code>anterior: ${b.hash_anterior}</code></article>`).join("");
+  }
+  function render(){renderResumen();renderResultado();renderMovimientos();renderLotes();renderBlockchain();}
+  async function cerrarLote(e){e.preventDefault();const f=new FormData(e.target),actor=f.get("actor"),lote=f.get("lote"),movs=estado[actor];const huella=await sha256(JSON.stringify(movs));estado.lotes.push({actor,lote,cantidad:movs.length,huella,fecha:new Date().toISOString()});estado.eventos.push({tipo:"lote_emitido",actor,lote,fecha:new Date().toISOString()});await agregarBloque([{tipo:"lote_emitido",actor,lote,cantidad:movs.length,huella}]);await guardar();render();aviso(`Lote ${lote} cerrado y añadido al bloque ${estado.blockchain.length-1}.`);}
+  async function registrar(e){e.preventDefault();const f=new FormData(e.target),actor=f.get("actor"),movimiento={id:id(),fecha:f.get("fecha"),monto:Number(f.get("monto")),referencia:f.get("referencia"),descripcion:f.get("descripcion")};estado[actor].push(movimiento);estado.eventos.push({tipo:"movimiento_registrado",actor,fecha:new Date().toISOString()});await agregarBloque([{tipo:"movimiento_registrado",actor,movimiento}]);await guardar();render();e.target.reset();e.target.fecha.value=hoy;aviso("Movimiento guardado y registrado en la blockchain local.");}
   function descargar(nombre,contenido,tipo){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([contenido],{type:tipo}));a.download=nombre;a.click();URL.revokeObjectURL(a.href);}
   function exportar(){descargar("conciliachain-memoria.json",JSON.stringify(estado,null,2),"application/json");}
+  function csv(filas){if(!filas.length)return "";const campos=["fecha","monto","referencia","descripcion"];const escapar=x=>String(x??"").replace(/"/g,'""');return [campos.join(","),...filas.map(x=>campos.map(k=>'"'+escapar(x[k])+'"').join(","))].join("\n");}
+  function exportarMovimientos(){descargar("movimientos-empresa.csv",csv(estado.empresa),"text/csv");descargar("movimientos-banco.csv",csv(estado.banco),"text/csv");aviso("Se descargaron los CSV de empresa y banco.");}
+  async function cargarDemo(){
+    if(!confirm("Esto reemplazará los movimientos actuales por el escenario demo 60/58. ¿Continuar?"))return;
+    const demo=datosDemo();estado.empresa=demo.empresa;estado.banco=demo.banco;estado.lotes=[];estado.resultado=null;estado.eventos=[{tipo:"reinicio_demo",fecha:new Date().toISOString(),empresa:60,banco:58}];estado.blockchain=[];await prepararBlockchain();await agregarBloque([{tipo:"reinicio_demo",empresa:60,banco:58}]);await guardar();render();aviso("Demo cargada: 60 movimientos de empresa y 58 del banco.");}
   function importar(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.empresa||!x.banco)throw Error("estructura");estado=x;guardar().then(()=>{render();aviso("Memoria importada correctamente.");});}catch(_){aviso("El archivo no contiene una memoria válida.","error");}};r.readAsText(f);}
-  async function iniciar(){estado=await leer();document.querySelector("#movimientoForm").fecha.value=hoy;document.querySelector("#conciliar").onclick=conciliar;document.querySelector("#movimientoForm").onsubmit=registrar;document.querySelector("#loteForm").onsubmit=cerrarLote;document.querySelector("#exportarMemoria").onclick=exportar;document.querySelector("#importarMemoria").onchange=importar;document.querySelector("#borrarMemoria").onclick=()=>{if(confirm("¿Borrar todos los datos locales?")){estado=clonar(inicial);guardar().then(()=>{render();aviso("Memoria borrada.");});}};document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.remove("activa"));b.classList.add("activa");document.querySelectorAll(".panel").forEach(x=>x.classList.add("oculto"));document.querySelector("#"+b.dataset.tab).classList.remove("oculto");});render();}
+  async function iniciar(){estado=await leer();estado.blockchain=estado.blockchain||[];await prepararBlockchain();document.querySelector("#movimientoForm").fecha.value=hoy;document.querySelector("#conciliar").onclick=conciliar;document.querySelector("#movimientoForm").onsubmit=registrar;document.querySelector("#loteForm").onsubmit=cerrarLote;document.querySelector("#exportarMemoria").onclick=exportar;document.querySelector("#exportarMovimientos").onclick=exportarMovimientos;document.querySelector("#importarMemoria").onchange=importar;document.querySelector("#cargarDemo").onclick=cargarDemo;document.querySelector("#borrarMemoria").onclick=()=>{if(confirm("¿Borrar todos los datos locales?")){estado=clonar(inicial);prepararBlockchain().then(()=>{render();aviso("Memoria borrada.");});}};document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.remove("activa"));b.classList.add("activa");document.querySelectorAll(".panel").forEach(x=>x.classList.add("oculto"));document.querySelector("#"+b.dataset.tab).classList.remove("oculto");});render();}
   iniciar();
 })();

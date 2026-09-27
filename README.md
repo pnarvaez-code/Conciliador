@@ -21,7 +21,8 @@ El repositorio ofrece dos formas de uso:
 - Registro de movimientos de empresa y banco.
 - Persistencia local con SQLite.
 - Cierre de lotes y emisión de extractos CSV, XML y JSON.
-- Cadena JSONL append-only con huellas SHA-256.
+- Blockchain local append-only con bloque génesis, `previous_hash`, nonce y
+  prueba de trabajo.
 - Huella de cada movimiento, archivo, raíz de lote y bloque anterior.
 - Propagación de bloques entre copias y detección de brechas.
 - Verificación de cadenas, archivos y movimientos.
@@ -40,6 +41,14 @@ El repositorio ofrece dos formas de uso:
 - Aplicaciones web independientes en los puertos 5000 a 5003.
 - Modo unificado en el puerto 8080.
 - Interfaz estática para GitHub Pages con memoria persistente del navegador.
+
+La blockchain de ConciliaChain es un libro mayor local orientado a la
+trazabilidad de lotes y eventos. No es una criptomoneda ni depende de una red
+pública: cada bloque contiene transacciones de gestión, el hash del bloque
+anterior, un nonce y un hash SHA-256 que debe cumplir la dificultad configurada.
+La cadena se valida completa antes de presentarse como íntegra. El módulo
+`nucleo/blockchain.py` contiene la implementación Python y la SPA mantiene una
+réplica equivalente en el navegador.
 
 ## Requisitos
 
@@ -61,6 +70,7 @@ núcleo usa exclusivamente la biblioteca estándar.
 ├── servidor.py                 # Servidor HTTP de las aplicaciones
 ├── nucleo/
 │   ├── sello.py                # Huellas, bloques y verificación
+│   ├── blockchain.py           # Blockchain, minería y validación
 │   ├── conciliar.py            # Algoritmo de conciliación
 │   ├── eventos.py              # Eventos JSONL
 │   └── llamadas.py             # Llamadas HTTP estándar
@@ -83,6 +93,26 @@ Clona el repositorio y entra en su directorio:
 git clone https://github.com/pnarvaez-code/Conciliador.git
 cd Conciliador
 ```
+
+### Inicio sencillo en Windows
+
+Si descargaste el repositorio como ZIP, no necesitas escribir comandos:
+
+1. Instala Python 3.10 o superior desde
+   [python.org](https://www.python.org/downloads/windows/). Durante la
+   instalación activa **Add Python to PATH**.
+2. Abre la carpeta del proyecto.
+3. Haz doble clic en `ejecutar_web.bat`.
+4. El navegador abrirá la aplicación web con memoria y blockchain local en
+   `http://127.0.0.1:8000`.
+
+Para arrancar también los servicios Python de empresa, banco, conciliación y
+visor, haz doble clic en `ejecutar.bat`. La ventana negra debe permanecer
+abierta mientras uses los servicios; presiona `Ctrl+C` para detenerlos.
+
+`ejecutar_web.bat` solo necesita Python para servir los archivos estáticos. Si
+Python no está instalado, abre `docs/index.html` directamente, aunque algunos
+navegadores pueden restringir el almacenamiento local al usar archivos `file://`.
 
 ### Flujo completo con cuatro aplicaciones
 
@@ -146,6 +176,34 @@ El cierre de lote es el punto de control: después de cerrar un lote, cualquier
 modificación del archivo asociado debe provocar una verificación inválida.
 Para corregir datos, genera un nuevo lote; no edites manualmente una cadena
 existente.
+
+### Blockchain y prueba de trabajo
+
+Además de la cadena de sellos de archivos, `Blockchain` mantiene un libro mayor
+de bloques:
+
+```python
+from nucleo.blockchain import Blockchain
+
+cadena = Blockchain(dificultad=2)
+cadena.agregar([
+    {"tipo": "lote_emitido", "lote": "LOTE-001", "cantidad": 60}
+])
+assert cadena.validar()
+```
+
+El bloque génesis usa `hash_anterior` compuesto por 64 ceros. Los siguientes
+bloques enlazan exactamente con `hash_bloque` del anterior. Para minar, el
+nonce se incrementa hasta que el hash empiece con la cantidad de ceros indicada
+por `dificultad`. Si se cambia una transacción, el timestamp, el nonce o
+cualquier enlace, `validar()` devuelve `False`.
+
+La aplicación web crea un bloque para cada movimiento registrado, cada lote
+cerrado y cada conciliación ejecutada. La pestaña **Blockchain** muestra el
+génesis, el índice, el nonce, el hash actual, el hash anterior, la cantidad de
+transacciones y el estado de integridad. La dificultad web es deliberadamente
+baja para que el navegador siga siendo usable; la blockchain local no pretende
+ofrecer seguridad económica frente a un atacante con control del navegador.
 
 ## API HTTP
 
@@ -340,6 +398,8 @@ Actions**.
 
 La aplicación web permite:
 
+- cargar el escenario demo equivalente a la aplicación Python (60 movimientos
+  de empresa y 58 del banco) con el botón **Cargar demo 60/58**;
 - registrar movimientos de empresa y banco;
 - ejecutar la conciliación desde el navegador;
 - visualizar cruces por nivel y pendientes;
@@ -348,6 +408,12 @@ La aplicación web permite:
 - exportar toda la memoria como JSON;
 - importar una memoria previamente exportada;
 - borrar los datos locales del navegador.
+
+El botón **Descargar CSV de empresa y banco** convierte los movimientos de la
+memoria web en archivos que pueden abrirse con Excel u otro sistema contable.
+La conversión no ejecuta Python en GitHub Pages: traduce en JavaScript las
+reglas y el escenario principal del ZIP para que el flujo funcione como sitio
+estático.
 
 La memoria se guarda en IndexedDB y mantiene un respaldo en localStorage. Es
 intencionalmente local: GitHub Pages sirve archivos estáticos y no ofrece una

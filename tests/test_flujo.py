@@ -10,6 +10,7 @@ from conciliachain.datos_prueba.generador import generar_registros
 from datos_prueba.generador import empresa, banco, escribir_ejemplos
 from conciliachain.apps.concilia import ejecutar
 from conciliachain.utilidades.exportar import a_json
+from nucleo.blockchain import Blockchain, GENESIS
 
 class FlujoTest(unittest.TestCase):
     def test_flujo_60_58(self):
@@ -55,6 +56,14 @@ class FlujoTest(unittest.TestCase):
             self.assertIn("empresa_8.csv", nombres)
             self.assertIn("empresa_8.xml", nombres)
             self.assertIn("empresa_tocado_excel.csv", nombres)
+
+    def test_blockchain_prueba_de_trabajo_y_alteracion(self):
+        cadena = Blockchain(dificultad=1)
+        self.assertEqual(cadena.bloques[0]["hash_anterior"], GENESIS)
+        cadena.agregar([{"tipo": "lote_emitido", "lote": "L1"}], timestamp=1)
+        self.assertTrue(cadena.validar())
+        cadena.bloques[1]["transacciones"][0]["lote"] = "ALTERADO"
+        self.assertFalse(cadena.validar())
 
 if __name__ == "__main__":
     unittest.main()

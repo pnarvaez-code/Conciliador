@@ -14,6 +14,7 @@
       <p class="submarca">Conciliación local, simple y auditable</p>
     </div>
     <div class="acciones">
+      <button id="cargarDemo" class="principal">Cargar demo 60/58</button>
       <button id="exportarMemoria" class="secundario">Exportar memoria</button>
       <label class="boton secundario">Importar memoria<input id="importarMemoria" type="file" accept=".json" hidden></label>
       <button id="borrarMemoria" class="peligro">Borrar memoria</button>
@@ -33,6 +34,7 @@
       <button class="activa" data-tab="panelConciliacion">Conciliación</button>
       <button data-tab="panelMovimientos">Movimientos</button>
       <button data-tab="panelLotes">Lotes y memoria</button>
+      <button data-tab="panelBlockchain">Blockchain</button>
     </nav>
 
     <section id="panelConciliacion" class="panel">
@@ -50,6 +52,7 @@
         <label class="ancho-completo">Descripción<input name="descripcion" maxlength="160" required></label>
         <button class="principal" type="submit">Guardar movimiento</button>
       </form>
+      <button id="exportarMovimientos" class="secundario">Descargar CSV de empresa y banco</button>
       <div id="listaMovimientos"></div>
     </section>
 
@@ -62,6 +65,12 @@
       </form>
       <div id="listaLotes" class="lista"></div>
       <h2>Eventos</h2><div id="listaEventos" class="lista"></div>
+    </section>
+
+    <section id="panelBlockchain" class="panel oculto">
+      <div class="cabecera-panel"><div><h1>Blockchain local</h1><p>Libro mayor encadenado con SHA-256, bloque génesis, hash anterior y prueba de trabajo.</p></div><span id="estadoBlockchain" class="etiqueta pendiente">Verificando...</span></div>
+      <div id="resumenBlockchain" class="cadena-resumen"></div>
+      <div id="listaBlockchain" class="bloques"></div>
     </section>
   </main>
   <script src="./app.js"></script>
