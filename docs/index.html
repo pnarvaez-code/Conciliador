@@ -33,6 +33,7 @@
       <button class="activa" data-tab="panelConciliacion">Conciliación</button>
       <button data-tab="panelMovimientos">Movimientos</button>
       <button data-tab="panelLotes">Lotes y memoria</button>
+      <button data-tab="panelBlockchain">Blockchain</button>
     </nav>
 
     <section id="panelConciliacion" class="panel">
@@ -62,6 +63,12 @@
       </form>
       <div id="listaLotes" class="lista"></div>
       <h2>Eventos</h2><div id="listaEventos" class="lista"></div>
+    </section>
+
+    <section id="panelBlockchain" class="panel oculto">
+      <div class="cabecera-panel"><div><h1>Blockchain local</h1><p>Libro mayor encadenado con SHA-256, bloque génesis, hash anterior y prueba de trabajo.</p></div><span id="estadoBlockchain" class="etiqueta pendiente">Verificando...</span></div>
+      <div id="resumenBlockchain" class="cadena-resumen"></div>
+      <div id="listaBlockchain" class="bloques"></div>
     </section>
   </main>
   <script src="./app.js"></script>
